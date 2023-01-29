@@ -25,7 +25,11 @@ const plugin: FastifyPluginAsyncJsonSchemaToTs = async (
         'key': 'id',
         'equals': request.params.id
       });
-      return profile!!;
+      if (profile) {
+        return profile;
+      } else {
+        throw reply.notFound();
+      };
     }
   );
 
@@ -37,7 +41,26 @@ const plugin: FastifyPluginAsyncJsonSchemaToTs = async (
       },
     },
     async function (request, reply): Promise<ProfileEntity> {
-      return fastify.db.profiles.create(request.body);
+      let { userId, memberTypeId } = request.body;
+
+      let existingProfile = await fastify.db.profiles.findOne({
+        'key': 'userId',
+        'equals': userId
+      });
+      if (existingProfile) {
+        throw reply.badRequest();
+      };
+
+      let existingMemberType = await fastify.db.memberTypes.findOne({
+        'key': 'id',
+        'equals': memberTypeId
+      });
+      if (!existingMemberType) {
+        throw reply.badRequest();
+      };
+
+      let created = fastify.db.profiles.create(request.body);
+      return created;
     }
   );
 
@@ -49,7 +72,15 @@ const plugin: FastifyPluginAsyncJsonSchemaToTs = async (
       },
     },
     async function (request, reply): Promise<ProfileEntity> {
-      return fastify.db.profiles.delete(request.params.id);
+      try {
+        let deleted = await fastify.db.profiles.delete(request.params.id);
+        return deleted;
+      } catch (err) {
+        if (err instanceof NoRequiredEntity) {
+          throw reply.badRequest();
+        };
+        throw err;
+      }
     }
   );
 
@@ -63,7 +94,10 @@ const plugin: FastifyPluginAsyncJsonSchemaToTs = async (
     },
     async function (request, reply): Promise<ProfileEntity> {
       try {
-        return fastify.db.profiles.change(request.params.id, request.body);
+        let patched = await fastify.db.profiles.change(
+          request.params.id, request.body
+        );
+        return patched;
       } catch (err) {
         if (err instanceof NoRequiredEntity) {
           throw reply.badRequest();
