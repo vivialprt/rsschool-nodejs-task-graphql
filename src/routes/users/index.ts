@@ -27,7 +27,11 @@ const plugin: FastifyPluginAsyncJsonSchemaToTs = async (
         'key': 'id',
         'equals': request.params.id
       });
-      return user!!;
+      if (user) {
+        return user;
+      } else {
+        throw reply.notFound();
+      };
     }
   );
 
@@ -51,7 +55,46 @@ const plugin: FastifyPluginAsyncJsonSchemaToTs = async (
       },
     },
     async function (request, reply): Promise<UserEntity> {
-      return fastify.db.users.delete(request.params.id);
+      try {
+        let subs = await fastify.db.users.findMany({
+          'key': 'subscribedToUserIds',
+          'inArray': request.params.id
+        });
+        for(let sub of subs) {
+          await fastify.db.users.change(
+            sub.id,
+            {
+              subscribedToUserIds: sub.subscribedToUserIds.filter(
+                id => id !== request.params.id
+              )
+            }
+          );
+        };
+
+        let posts = await fastify.db.posts.findMany({
+          'key': 'userId',
+          'equals': request.params.id
+        });
+        for(let { id } of posts) {
+          await fastify.db.posts.delete(id);
+        };
+
+        let profile = await fastify.db.profiles.findOne({
+          'key': 'userId',
+          'equals': request.params.id
+        });
+        if (profile) {
+          await fastify.db.profiles.delete(profile.id);
+        };
+
+        let deleted = await fastify.db.users.delete(request.params.id);
+        return deleted;
+      } catch (err) {
+        if (err instanceof NoRequiredEntity) {
+          throw reply.badRequest();
+        };
+        throw err;
+      };
     }
   );
 
@@ -127,7 +170,10 @@ const plugin: FastifyPluginAsyncJsonSchemaToTs = async (
     },
     async function (request, reply): Promise<UserEntity> {
       try {
-        return fastify.db.users.change(request.params.id, request.body);
+        let patched = await fastify.db.users.change(
+          request.params.id, request.body
+        );
+        return patched;
       } catch (err) {
         if (err instanceof NoRequiredEntity) {
           throw reply.badRequest();
